@@ -1,53 +1,87 @@
 <?php
 
-
 namespace Asciisd\Zoho;
 
-
-use zcrmsdk\crm\setup\org\ZCRMOrganization;
-use zcrmsdk\crm\setup\restclient\ZCRMRestClient;
-use zcrmsdk\crm\setup\users\ZCRMUser;
+use Asciisd\Zoho\Exceptions\APIException;
+use com\zoho\crm\api\exception\SDKException;
+use com\zoho\crm\api\org\APIException as OrgAPIException;
+use com\zoho\crm\api\org\Org;
+use com\zoho\crm\api\org\OrgOperations;
+use com\zoho\crm\api\org\ResponseWrapper as OrgResponseWrapper;
+use com\zoho\crm\api\ParameterMap;
+use com\zoho\crm\api\users\GetUsersParam;
+use com\zoho\crm\api\users\ResponseWrapper as UserResponseWrapper;
+use com\zoho\crm\api\users\User;
+use com\zoho\crm\api\users\UsersOperations;
+use Illuminate\Support\Arr;
 
 class ZohoOrganization
 {
-    protected $rest;
+    /** @var OrgOperations */
+    protected $orgOperations;
+    /** @var UsersOperations */
+    protected $userOperations;
 
-    /**
-     * ZohoOrganization constructor.
-     * @param ZCRMRestClient $rest
-     */
-    public function __construct($rest)
+    public function __construct()
     {
-        $this->rest = $rest;
+        $this->orgOperations = new OrgOperations;
+        $this->userOperations = new UsersOperations;
+    }
+
+    public function setOrgOperations(OrgOperations $orgOperations): self
+    {
+        $this->orgOperations = $orgOperations;
+
+        return $this;
+    }
+
+    public function setUsersOperations(UsersOperations $userOperations): self
+    {
+        $this->userOperations = $userOperations;
+
+        return $this;
     }
 
     /**
-     * get the organization in form of ZCRMOrganization instance
+     * Get the organization in form of Organization instance.
      *
-     * @return ZCRMOrganization|object
+     * @throws APIException
      */
-    public function getOrganizationDetails()
+    public function getOrganizationDetails(): Org
     {
-        return $this->rest->getOrganizationInstance();
+        $responseObj = $this->orgOperations->getOrganization()->getObject();
+        if ($responseObj instanceof OrgResponseWrapper) {
+            return Arr::first($responseObj->getOrg());
+        }
+
+        /** @var OrgAPIException $responseObj */
+        throw new APIException($responseObj);
     }
 
     /**
-     * get dummy organization object
-     *
-     * @return ZCRMOrganization
+     * Get dummy organization object.
      */
-    public function getOrganizationInstance()
+    public function getOrganizationInstance(): Org
     {
-        return $this->rest->getOrganizationInstance();
+        return new Org();
     }
 
     /**
-     * get the users in form of ZCRMUser instances array
+     * Get the current user.
      *
-     * @return ZCRMUser|object
+     * @throws APIException
+     * @throws SDKException
      */
-    public function getCurrentUser()
+    public function getCurrentUser(): User
     {
-        return $this->rest->getCurrentUser()->getData();
+        $params = new ParameterMap();
+        $params->add(GetUsersParam::type(), 'CurrentUser');
+        $responseObj = $this->userOperations->getUsers($params)->getObject();
+        if ($responseObj instanceof UserResponseWrapper) {
+            return Arr::first($responseObj->getUsers());
+        }
+
+        /** @var OrgAPIException $responseObj */
+        throw new APIException($responseObj);
     }
 }

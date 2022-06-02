@@ -14,7 +14,7 @@ class TestCase extends OrchestraTestCase
      * @param Application $app
      * @return array
      */
-    protected function getPackageProviders($app)
+    protected function getPackageProviders($app): array
     {
         return [
             ZohoServiceProvider::class

@@ -13,14 +13,21 @@
       "email": "aemad@asciisd.com"
     }
   ],
+  "repositories": [
+    {
+      "type": "vcs",
+      "url": "https://github.com/teachingcom/zohocrm-php-sdk-2.0"
+    }
+  ],
   "require": {
-    "php": "^7.2|^8.0",
+    "php": "^7.3|^8.0",
     "ext-json": "*",
     "illuminate/support": "^7.0|^8.0|^9.0",
     "nesbot/carbon": "^2.0",
-    "zohocrm/php-sdk-archive": "^2.2"
+    "zohocrm/php-sdk-2.0": "dev-refactor"
   },
   "require-dev": {
+    "guzzlehttp/guzzle": "^7.4",
     "mockery/mockery": "^1.0",
     "orchestra/testbench": "^4.0|^5.0",
     "phpunit/phpunit": "^8.0|^9.0"
@@ -42,7 +49,10 @@
     "laravel": {
       "providers": [
         "Asciisd\\Zoho\\Providers\\ZohoServiceProvider"
-      ]
+      ],
+      "aliases": {
+        "zoho_manager": "Asciisd\\Zoho\\Facades\\ZohoManager"
+      }
     }
   },
   "scripts": {

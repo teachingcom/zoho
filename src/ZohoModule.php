@@ -2,236 +2,317 @@
 
 namespace Asciisd\Zoho;
 
-use zcrmsdk\crm\crud\ZCRMModule;
-use zcrmsdk\crm\crud\ZCRMRecord;
-use zcrmsdk\crm\setup\restclient\ZCRMRestClient;
+use Asciisd\Zoho\Exceptions\APIException;
+use com\zoho\crm\api\exception\SDKException;
+use com\zoho\crm\api\modules\Module;
+use com\zoho\crm\api\modules\ModulesOperations;
+use com\zoho\crm\api\modules\ResponseWrapper as ModulesResponseWrapper;
+use com\zoho\crm\api\record\ActionWrapper;
+use com\zoho\crm\api\record\BodyWrapper;
+use com\zoho\crm\api\record\Record;
+use com\zoho\crm\api\record\RecordOperations;
+use com\zoho\crm\api\record\ResponseWrapper as RecordResponseWrapper;
+use com\zoho\crm\api\util\APIException as SDKAPIException;
+use com\zoho\crm\api\util\APIResponse;
+use Illuminate\Support\Arr;
 
 class ZohoModule
 {
-    protected $rest;
     protected $module_api_name;
-    protected $moduleIns;
-    protected $operators = ['equals', 'starts_with'];
+    /** @var ModulesOperations */
+    protected $modulesOperations;
+    /** @var RecordOperations */
+    protected $recordOperations;
 
     /**
      * ZohoModule constructor.
-     *
-     * @param ZCRMRestClient $rest
-     * @param $module_api_name
      */
-    public function __construct($rest, $module_api_name) {
-        $this->rest            = $rest;
+    public function __construct(string $module_api_name = 'Leads')
+    {
         $this->module_api_name = $module_api_name;
-        $this->moduleIns       = $this->getModuleInstance();
+        $this->modulesOperations = new ModulesOperations;
+        $this->recordOperations = new RecordOperations;
+    }
+
+    public function getApiName(): string
+    {
+        return $this->module_api_name;
+    }
+
+    public function setModulesOperations(ModulesOperations $modulesOperations): self
+    {
+        $this->modulesOperations = $modulesOperations;
+
+        return $this;
+    }
+
+    public function setRecordOperations(RecordOperations $recordOperations): self
+    {
+        $this->recordOperations = $recordOperations;
+
+        return $this;
     }
 
     /**
      * to get the the modules in form of ZCRMModule instances array
      *
-     * @return ZCRMModule[]
+     * @return Module[]
+     * @throws APIException
      */
-    public function getAllModules() {
-        return $this->rest->getAllModules()->getData();
+    public function getAllModules(): array
+    {
+        $response = $this->modulesOperations->getModules();
+
+        return $this->processResponseObject($response, ModulesResponseWrapper::class, function (ModulesResponseWrapper $responseObj) {
+            return $responseObj->getModules();
+        }, []);
     }
 
     /**
      * to get the module in form of ZCRMModule instance
-     *
-     * @return ZCRMModule|object
+     * @throws APIException
      */
-    public function getModule() {
-        return $this->rest->getModule($this->module_api_name)->getData();
+    public function getModule(): ?Module
+    {
+        $response = $this->modulesOperations->getModule($this->module_api_name);
+
+        return Arr::first($this->processResponseObject($response, ModulesResponseWrapper::class, function (ModulesResponseWrapper $responseObj) {
+            return $responseObj->getModules();
+        }, []));
     }
 
     /**
-     * get record instance
-     *
-     * @param $record_id
-     *
-     * @return ZCRMRecord
+     * Get record instance.
      */
-    public function getRecordInstance($record_id = null) {
-        return $this->rest->getRecordInstance($this->module_api_name,
-            $record_id);
+    public function getRecordInstance(string $record_id = null): Record
+    {
+        $record = new Record;
+        if ($record_id) {
+            $record->setId($record_id);
+        }
+
+        return $record;
     }
 
     /**
-     * get dummy module object
-     *
-     * @return ZCRMModule
+     * Get dummy Module object.
      */
-    public function getModuleInstance() {
-        return $this->rest->getModuleInstance($this->module_api_name);
+    public function getModuleInstance(): Module
+    {
+        $module = new Module;
+        $module->setAPIName($this->module_api_name);
+
+        return $module;
     }
 
     /**
      * get the records array of given module api name
      *
-     * @return ZCRMRecord[]
+     * @return Record[]
+     * @throws APIException
      */
-    public function getRecords() {
-        return $this->moduleIns->getRecords()->getData();
+    public function getRecords(): array
+    {
+        $response = $this->recordOperations->getRecords($this->module_api_name);
+
+        return $this->processResponseObject($response, RecordResponseWrapper::class, function (RecordResponseWrapper $responseObj) {
+            return $responseObj->getData();
+        }, []);
     }
 
     /**
-     * get the records array of given module api name
+     * Get the record object of given module api name and record id.
      *
-     * @return array
+     * @throws APIException
      */
-    public function getJsonRecords() {
-        return $this->moduleIns->getRecords()->getResponseJSON();
+    public function getRecord(string $record_id): ?Record
+    {
+        $response = $this->recordOperations->getRecord($record_id, $this->module_api_name);
+
+        return Arr::first($this->processResponseObject($response, RecordResponseWrapper::class, function (RecordResponseWrapper $responseObj) {
+            return $responseObj->getData();
+        }, []));
     }
 
     /**
-     * get the record object of given module api name and record id
+     * Search module records by word.
      *
-     * @param string $record_id
-     *
-     * @return object|ZCRMRecord
+     * @return Record[]
+     * @throws SDKException
+     * @throws APIException
      */
-    public function getRecord($record_id) {
-        return $this->moduleIns->getRecord($record_id)->getData();
+    public function searchRecordsByWord(string $word, int $page = 1, int $perPage = 200): array
+    {
+        $param_map = CriteriaBuilder::byWord($word, $page, $perPage);
+
+        $response = $this->recordOperations->searchRecords($this->module_api_name, $param_map);
+
+        return $this->processResponseObject($response, RecordResponseWrapper::class, function (RecordResponseWrapper $responseObj) {
+            return $responseObj->getData();
+        }, []);
     }
 
     /**
-     * get module records
+     * Search module records by phone number.
      *
-     * @param string $word  //word to be searched
-     * @param int $page  //to get the list of records from the respective pages. Default value for page is 1.
-     * @param int $perPage  //To get the list of records available per page. Default value for per page is 200.
-     *
-     * @return ZCRMRecord[]
+     * @return Record[]
+     * @throws SDKException
+     * @throws APIException
      */
-    public function searchRecordsByWord($word = '', $page = 1, $perPage = 200) {
-        $param_map = ["page" => $page, "per_page" => $perPage];
+    public function searchRecordsByPhone(string $phone, int $page = 1, int $perPage = 200): array
+    {
+        $param_map = CriteriaBuilder::byPhone($phone, $page, $perPage);
 
-        return $this->moduleIns->searchRecordsByWord($word, $param_map)
-                               ->getData();
+        $response = $this->recordOperations->searchRecords($this->module_api_name, $param_map);
+
+        return $this->processResponseObject($response, RecordResponseWrapper::class, function (RecordResponseWrapper $responseObj) {
+            return $responseObj->getData();
+        }, []);
     }
 
     /**
-     * get module records
+     * Search module records by email.
      *
-     * @param string $phone  //phone to be searched
-     * @param int $page  //to get the list of records from the respective pages. Default value for page is 1.
-     * @param int $perPage  //To get the list of records available per page. Default value for per page is 200.
-     *
-     * @return ZCRMRecord[]
+     * @return Record[]
+     * @throws SDKException
+     * @throws APIException
      */
-    public function searchRecordsByPhone(
-        $phone = '',
-        $page = 1,
-        $perPage = 200
-    ) {
-        $param_map = ["page" => $page, "per_page" => $perPage];
+    public function searchRecordsByEmail(string $email, int $page = 1, int $perPage = 200): array
+    {
+        $param_map = CriteriaBuilder::byEmail($email, $page, $perPage);
 
-        return $this->moduleIns->searchRecordsByPhone($phone, $param_map)
-                               ->getData();
+        $response = $this->recordOperations->searchRecords($this->module_api_name, $param_map);
+
+        return $this->processResponseObject($response, RecordResponseWrapper::class, function (RecordResponseWrapper $responseObj) {
+            return $responseObj->getData();
+        }, []);
     }
 
     /**
-     * get module records
+     * Search module records by criteria string.
      *
-     * @param string $email  //email to be searched
-     * @param int $page  //to get the list of records from the respective pages. Default value for page is 1.
-     * @param int $perPage  //To get the list of records available per page. Default value for per page is 200.
-     *
-     * @return ZCRMRecord[]
+     * @return Record[]
+     * @throws APIException
+     * @throws SDKException
      */
-    public function searchRecordsByEmail(
-        $email = '',
-        $page = 1,
-        $perPage = 200
-    ) {
-        $param_map = ["page" => $page, "per_page" => $perPage];
+    public function searchRecordsByCriteria(string $criteria, int $page = 1, int $perPage = 200): array
+    {
+        $params = CriteriaBuilder::fromCriteriaString($criteria, $page, $perPage);
 
-        return $this->moduleIns->searchRecordsByEmail($email, $param_map)
-                               ->getData();
-    }
+        $response = $this->recordOperations->searchRecords($this->module_api_name, $params);
 
-    /**
-     * get module records
-     *
-     * @param string $criteria  //criteria to search for
-     * @param int $page  //to get the list of records from the respective pages. Default value for page is 1.
-     * @param int $perPage  //To get the list of records available per page. Default value for per page is 200.
-     *
-     * @return ZCRMRecord[]
-     */
-    public function searchRecordsByCriteria($criteria, $page = 1, $perPage = 200) {
-        $param_map = ["page" => $page, "per_page" => $perPage];
-
-        return $this->moduleIns->searchRecordsByCriteria($criteria, $param_map)
-                               ->getData();
+        return $this->processResponseObject($response, RecordResponseWrapper::class, function (RecordResponseWrapper $responseObj) {
+            return $responseObj->getData();
+        }, []);
     }
 
     /**
      * Add new entities to a module.
      *
-     * @param ZCRMRecord $record
-     * @param string|null $trigger  array of triggers
+     * @param string ...$trigger Optional trigger(s) to include.
      *
-     * @return ZCRMRecord[]
+     * @throws APIException
      */
-    public function insert($record, string $trigger = null) {
-        $records = [];
+    public function insert(Record $record, string ...$trigger): Record
+    {
+        $request = new BodyWrapper();
+        $request->setData([$record]);
+        $request->setTrigger($trigger);
 
-        array_push($records, $record);
+        $response = $this->recordOperations->createRecords($this->module_api_name, $request);
 
-        return $this->moduleIns->createRecords($records, $trigger)->getData();
+        return Arr::first($this->processResponseObject($response, ActionWrapper::class, function (ActionWrapper $responseObj) {
+            return $responseObj->getData();
+        }, []));
     }
 
     /**
-     * create record instance that contains the array keys and values
+     * Create record instance that contains the array keys and values.
      *
-     * @param array $args
-     * @param string|null $trigger  array of triggers
+     * @param array $args Key/value pairs to be set on the `Record` instance.
+     * @param string ...$trigger Optional trigger(s) to include.
      *
-     * @return object
+     * @throws APIException
      */
-    public function create(array $args = [], string $trigger = null) {
+    public function create(array $args, string ...$trigger): Record
+    {
         $record = $this->getRecordInstance();
 
-        foreach($args as $key => $value) {
-            $record->setFieldValue($key, $value);
+        foreach ($args as $key => $value) {
+            $record->addKeyValue($key, $value);
         }
 
-        return $record->create($trigger)->getData();
+        return $this->insert($record, ...$trigger);
     }
 
     /**
      * update existing entities in the module.
      *
-     * @param ZCRMRecord $record
-     * @param string $trigger  array of triggers
+     * @param Record $record Record to update.
+     * @param string ...$trigger Optional trigger(s) to include.
      *
-     * @return ZCRMRecord[]
+     * @return Record
+     * @throws APIException
      */
-    public function update($record, $trigger = null) {
-        $records = [];
+    public function update(Record $record, string ...$trigger): Record
+    {
+        $request = new BodyWrapper();
+        $request->setData([$record]);
+        $request->setTrigger($trigger);
 
-        array_push($records, $record);
+        $response = $this->recordOperations->updateRecord($record->getId(), $this->module_api_name, $request);
 
-        return $this->moduleIns->updateRecords($records, $trigger)->getData();
+        return Arr::first($this->processResponseObject($response, ActionWrapper::class, function (ActionWrapper $responseObj) {
+            return $responseObj->getData();
+        }, []));
     }
 
     /**
-     * @param CriteriaBuilder $builder
-     * @param int $page  //to get the list of records from the respective pages. Default value for page is 1.
-     * @param int $perPage  //To get the list of records available per page. Default value for per page is 200.
+     * Searches records within the module using the given criteria.
      *
-     * @return ZCRMRecord[]
+     * @return Record[]
+     * @throws APIException
+     * @throws SDKException
      */
-    public function search($builder, $page = 1, $perPage = 200) {
-        if($builder->toString() !== "") {
-            return $this->searchRecordsByCriteria($builder->toString(), $page,
-                $perPage);
-        }
+    public function search(CriteriaBuilder $criteria): array
+    {
+        $response = $this->recordOperations->searchRecords($this->module_api_name, $criteria->toParameterMap());
 
-        return null;
+        return $this->processResponseObject($response, RecordResponseWrapper::class, function (RecordResponseWrapper $responseObj) {
+            return $responseObj->getData();
+        }, []);
     }
 
-    public function where($field, $value, $operator = 'equals') {
+    /**
+     * Builds a `where` criteria from the given field, value, and operator.
+     *
+     * @param string $operator One of `CriteriaBuilder::OPERATOR_*` constant values. Defaults to `equals`.
+     */
+    public function where(string $field, $value, string $operator = CriteriaBuilder::OPERATOR_EQUALS): CriteriaBuilder
+    {
         return CriteriaBuilder::where($field, $value, $operator, $this);
+    }
+
+    /**
+     * If `$response->getObject()` returns an instance of `$successClass`, return the data from the `$dataGetter`
+     * callable, otherwise throw an APIException.
+     *
+     * @param callable $dataGetter A callable which accepts an instance of the `$successClass` as an argument and returns the data.
+     *
+     * @return mixed
+     * @throws APIException
+     */
+    private function processResponseObject(APIResponse $response, string $successClass, callable $dataGetter, $default = null)
+    {
+        $responseObj = $response->getObject();
+        if (null === $responseObj) {
+            return $default;
+        }
+        if (is_a($responseObj, $successClass)) {
+            return call_user_func($dataGetter, $responseObj) ?? $default;
+        }
+
+        /** @var SDKAPIException $responseObj */
+        throw new APIException($responseObj);
     }
 }

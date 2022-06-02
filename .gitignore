@@ -1,5 +1,6 @@
 /vendor
 .idea
+.env
 build
 /phpunit.xml
 composer.lock
